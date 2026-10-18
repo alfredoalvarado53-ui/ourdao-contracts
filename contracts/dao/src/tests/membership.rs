@@ -217,3 +217,32 @@ fn exit_dao_succeeds_when_treasury_funded() {
     s.client.exit_dao(&member);
     assert!(!s.client.is_member(&member));
 }
+
+// ==================== #92: view and payout agree ====================
+#[test]
+fn pending_yield_view_matches_claim_rewards_payout() {
+    let s = setup(3);
+    let borrower = s.members.get(0).unwrap();
+    let v1 = s.members.get(1).unwrap();
+    let v2 = s.members.get(2).unwrap();
+
+    let pid = s.client.request_loan(&borrower, &1_000, &None);
+    advance(&s.env, EDITING + 1);
+    s.client.vote_on_loan_proposal(&v1, &pid, &true);
+    s.client.vote_on_loan_proposal(&v2, &pid, &true);
+    s.client.repay_loan(&borrower, &0);
+
+    let shown = s.client.get_pending_yield(&v1);
+    assert!(shown > 0);
+    let before = s.token.balance(&v1);
+    let claimed = s.client.claim_rewards(&v1);
+    assert_eq!(claimed, shown);
+    assert_eq!(s.token.balance(&v1) - before, shown);
+
+    // exit_dao pays share + stake + the same displayed pending yield.
+    let shown = s.client.get_pending_yield(&v2);
+    let share = s.client.calculate_exit_share(&v2);
+    let before = s.token.balance(&v2);
+    s.client.exit_dao(&v2);
+    assert_eq!(s.token.balance(&v2) - before, share + shown);
+}

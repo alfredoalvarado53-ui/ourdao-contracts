@@ -228,8 +228,10 @@ pub fn refresh_phase(env: &Env, mut proposal: LoanProposal) -> LoanProposal {
         && now > proposal.editing_period_end + proposal.voting_period
         && proposal.status == ProposalStatus::Pending
     {
+        // Timed out without quorum: `Expired` status, distinct from the
+        // `Rejected` status written by the early-rejection path.
         proposal.phase = ProposalPhase::Expired;
-        proposal.status = ProposalStatus::Rejected;
+        proposal.status = ProposalStatus::Expired;
     }
     proposal
 }
@@ -575,6 +577,13 @@ pub fn mark_loan_defaulted(env: &Env, loan_id: u32) -> Result<(), Error> {
         if penalty > 0 {
             storage::set_total_contributions(env, storage::get_total_contributions(env) - penalty);
         }
+        // Yield is split equally (see `distribute_interest`), so a defaulter
+        // keeps earning from here on like any active member, but forfeits
+        // whatever yield they had accrued and not yet claimed at the moment
+        // of default. Advancing the snapshot leaves that amount in the
+        // treasury, where it accrues to the remaining members' exit shares.
+        let acc = storage::get_yield_accumulator(env);
+        storage::set_yield_snapshot(env, &loan.borrower, acc);
     }
     storage::extend_instance(env);
 
@@ -586,6 +595,12 @@ pub fn mark_loan_defaulted(env: &Env, loan_id: u32) -> Result<(), Error> {
 }
 
 /// Splits repaid interest equally across active members as claimable yield.
+///
+/// Yield is deliberately one-member-one-share while the exit share is
+/// proportional to contribution: yield rewards participation, the exit share
+/// returns capital. A defaulted borrower forfeits their unclaimed yield at the
+/// moment of default (see `mark_loan_defaulted`).
+///
 /// Any indivisible remainder is retained by the treasury.
 ///
 /// Uses a pull-based accumulator: instead of iterating every member and

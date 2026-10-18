@@ -162,7 +162,10 @@ fn total_active_contributions(env: &Env) -> i128 {
         .sum()
 }
 
-fn compute_pending_yield(env: &Env, addr: &Address) -> i128 {
+/// Single definition of a member's unclaimed yield. Used by `exit_dao`,
+/// `claim_rewards` and the public `get_pending_yield` view so the amount
+/// displayed is always the amount paid.
+pub(crate) fn compute_pending_yield(env: &Env, addr: &Address) -> i128 {
     let acc = storage::get_yield_accumulator(env);
     let snap = storage::get_yield_snapshot(env, addr);
     (acc - snap).max(0)

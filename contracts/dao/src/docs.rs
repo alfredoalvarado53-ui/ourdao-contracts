@@ -68,6 +68,11 @@ pub fn attach_document(
     Ok(())
 }
 
-pub fn get_document(env: &Env, kind: ProposalKind, proposal_id: u32) -> Option<Bytes> {
-    storage::get_doc(env, kind, proposal_id)
+pub fn get_document(
+    env: &Env,
+    kind: ProposalKind,
+    proposal_id: u32,
+) -> Result<Option<Bytes>, Error> {
+    util::require_initialized(env)?;
+    Ok(storage::get_doc(env, kind, proposal_id))
 }

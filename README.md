@@ -45,6 +45,24 @@ This repository is one of three that make up OurDAO:
 - **Treasury** — any member can propose a withdrawal to any destination; execution requires a higher (60%) consensus than loan approval, reflecting the larger blast radius of moving treasury funds arbitrarily.
 - **Safety** — admin pause/unpause blocks all state-changing operations instantly (except loan repayments, which remain available to prevent forcing borrowers into default), and extensive view functions let any client inspect full DAO state without needing an indexer for real-time reads.
 
+### Yield and exit-share rules
+
+- **Yield is equal-split.** Interest repaid on a loan is divided equally among active members at the time of repayment (one member, one share), via an O(1) accumulator. Contribution size does not change a member's yield.
+- **Exit share is contribution-weighted.** On exit a member receives `treasury × their contribution ÷ total active contributions`. Yield rewards participation; the exit share returns capital.
+- **Defaulters.** When a loan is marked defaulted, the borrower's contribution is slashed by `default_penalty_bps` and they forfeit any yield accrued but unclaimed at that moment (it stays in the treasury). They remain active members and earn an equal share of interest repaid afterwards, until they exit.
+
+### Proposal end states
+
+| How it ended | `status` | `phase` | Event |
+|---|---|---|---|
+| Voting window closed without quorum | `Expired` | `Expired` | `loan_exp` |
+| Quorum became unreachable before the deadline | `Rejected` | `Expired` | `loan_rej` |
+| Cancelled by the borrower during editing | `Cancelled` | `Expired` | `prop_canc` |
+
+### Uninitialized contracts
+
+Every view that reads DAO configuration or the registry (`get_token`, `get_admins`, `is_admin`, `get_loan_policy`, `get_consensus_threshold`, `get_treasury_balance`, `calculate_loan_terms`, `calculate_exit_share`, `resolve_name`, `name_of`, `get_document`) returns `Error::NotInitialized` before `initialize` has run, instead of trapping or returning an ambiguous `None`. Call `is_initialized()` first to probe an unknown address. Per-record lookups such as `get_member` and `get_loan` still return `None` for a missing record.
+
 ## Additional feature modules
 
 Four Soroban-native features beyond the core lending/treasury flow, each fully implemented — not stubbed out:
