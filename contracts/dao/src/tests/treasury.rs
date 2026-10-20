@@ -300,3 +300,26 @@ fn tally_persists_status_and_votes_whether_executed_or_waiting() {
     assert_eq!((waiting.for_votes, waiting.votes_cast), (3, 3));
     assert_eq!(s.token.balance(&dest), 2_000);
 }
+
+#[test]
+fn propose_treasury_withdrawal_rejects_self_destination() {
+    let s = setup(2);
+    let proposer = s.members.get(0).unwrap();
+    let self_dest = s.client.address.clone();
+    let reason = String::from_str(&s.env, "grant to self");
+
+    let res = s
+        .client
+        .try_propose_treasury_withdrawal(&proposer, &500, &self_dest, &reason, &false);
+    assert_eq!(res, Err(Ok(Error::InvalidProposal)));
+
+    let res_asset = s.client.try_propose_withdrawal_in_asset(
+        &proposer,
+        &500,
+        &s.token.address,
+        &self_dest,
+        &reason,
+        &false,
+    );
+    assert_eq!(res_asset, Err(Ok(Error::InvalidProposal)));
+}

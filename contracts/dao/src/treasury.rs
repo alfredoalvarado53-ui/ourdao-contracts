@@ -41,7 +41,7 @@ pub fn propose_withdrawal_in_asset(
     if amount <= 0 {
         return Err(Error::InvalidAmount);
     }
-    if reason.is_empty() || reason.len() > 256 {
+    if destination == env.current_contract_address() || reason.is_empty() || reason.len() > 256 {
         return Err(Error::InvalidProposal);
     }
     if !storage::is_token_whitelisted(env, &asset) {
