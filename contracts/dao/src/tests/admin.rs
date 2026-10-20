@@ -278,6 +278,19 @@ fn only_admin_governs() {
 }
 
 #[test]
+fn set_consensus_threshold_rejects_out_of_range() {
+    let s = setup(1);
+    assert_eq!(
+        s.client.try_set_consensus_threshold(&s.admin, &0),
+        Err(Ok(Error::InvalidThreshold))
+    );
+    assert_eq!(
+        s.client.try_set_consensus_threshold(&s.admin, &10_001),
+        Err(Ok(Error::InvalidThreshold))
+    );
+}
+
+#[test]
 fn cannot_remove_last_admin() {
     let s = setup(0);
     let res = s.client.try_remove_admin(&s.admin, &s.admin);
@@ -335,12 +348,22 @@ fn validate_policy_rejects_quorum_bps_above_basis_points() {
     assert_eq!(res, Err(Ok(Error::InvalidLoanPolicy)));
 }
 
+// Issue #320: Validate quorum_bps within 1..=10000 on policy updates
+#[test]
+fn validate_policy_rejects_zero_quorum_bps() {
+    let mut p = policy();
+    p.quorum_bps = 0;
+    let s = setup(1);
+    let res = s.client.try_propose_policy_update(&s.admin, &p);
+    assert_eq!(res, Err(Ok(Error::InvalidLoanPolicy)));
+}
+
 /// Every bound enforced by `admin::validate_policy` is exercised here. This
 /// keeps policy validation from silently regressing when a new field is added
 /// or an existing comparison is changed.
 #[test]
 fn propose_policy_update_rejects_every_invalid_bound() {
-    let cases: [fn(&mut crate::types::LoanPolicy); 18] = [
+    let cases: [fn(&mut crate::types::LoanPolicy); 19] = [
         |p| p.membership_contribution = 0,
         |p| p.max_loan_duration = 0,
         |p| p.min_interest_rate = 10_001,
@@ -360,6 +383,7 @@ fn propose_policy_update_rejects_every_invalid_bound() {
         |p| p.default_grace_period = 30 * 24 * 60 * 60 + 1,
         |p| p.treasury_threshold = 0,
         |p| p.treasury_threshold = 10_001,
+        |p| p.quorum_bps = 0,
         |p| p.quorum_bps = 10_001,
     ];
     for mutate in cases {
@@ -381,6 +405,7 @@ fn policy_update_timelock_enforced() {
 
     let mut new_p = policy();
     new_p.max_loan_duration = 60 * 24 * 60 * 60; // change duration
+    new_p.quorum_bps = 5_100;
 
     // Non-admin cannot propose policy update
     let err = s.client.try_propose_policy_update(&non_admin, &new_p);
@@ -432,6 +457,7 @@ fn policy_update_cancel_by_admin() {
 
     let mut new_p = policy();
     new_p.min_interest_rate = 1_000;
+    new_p.quorum_bps = 5_100;
 
     s.client.propose_policy_update(&s.admin, &new_p);
     assert!(s.client.get_pending_policy_update().is_some());

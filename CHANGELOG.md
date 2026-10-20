@@ -17,6 +17,8 @@ All notable changes to `ourdao-contracts` are documented here. The format follow
 
 ### Fixed
 - Added regression coverage that `reveal_vote` removes the stored commitment (#356).
+- Validate consensus/treasury thresholds and quorum_bps are within 1..=10000: reject zero quorum_bps in proposed policy updates and verify set_consensus_threshold bounds (#320).
+
 
 ### Added
 - `make costs` and `tests/costs.rs`: per-entrypoint CPU, memory, ledger I/O, event size and fee estimates measured against the optimized wasm, plus how votes and `exit_dao` scale with membership; `make size` reports raw and optimized wasm size (#357, #358).
