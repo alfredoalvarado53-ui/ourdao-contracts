@@ -17,6 +17,7 @@ All notable changes to `ourdao-contracts` are documented here. The format follow
 
 ### Fixed
 - Added regression coverage that `reveal_vote` removes the stored commitment (#356).
+- Restrict `register_name` to active DAO members (#327).
 
 ### Added
 - `make costs` and `tests/costs.rs`: per-entrypoint CPU, memory, ledger I/O, event size and fee estimates measured against the optimized wasm, plus how votes and `exit_dao` scale with membership; `make size` reports raw and optimized wasm size (#357, #358).
