@@ -17,6 +17,7 @@ All notable changes to `ourdao-contracts` are documented here. The format follow
 
 ### Fixed
 - Added regression coverage that `reveal_vote` removes the stored commitment (#356).
+- Rounding direction review across all division sites: member debts and penalties round up (ceil division) and member payouts round down (floor division) to favour the treasury, with full division inventory documented in `docs/INVARIANTS.md` (#325).
 
 ### Added
 - `make costs` and `tests/costs.rs`: per-entrypoint CPU, memory, ledger I/O, event size and fee estimates measured against the optimized wasm, plus how votes and `exit_dao` scale with membership; `make size` reports raw and optimized wasm size (#357, #358).

@@ -271,3 +271,23 @@ fn active_contributions_matches_scan_after_default_penalty() {
     assert!(total < 3 * FEE, "penalty must reduce the running total");
     assert_eq!(total, scanned_active_contributions(&s));
 }
+
+// ==================== issue #325: rounding direction ====================
+
+#[test]
+fn exit_share_rounds_down_to_favour_treasury() {
+    let s = setup(3);
+    // Mint 1 extra stroop to the treasury so treasury balance is 3 * FEE + 1 (3001).
+    // Total contributions = 3000.
+    // For member with contribution = 1000:
+    // share = treasury * contribution / total_contributions = 3001 * 1000 / 3000 = 3_001_000 / 3000 = 1000.333...
+    // Floor division must yield 1000, leaving the 1 extra stroop in the treasury (Invariant A2).
+    soroban_sdk::token::StellarAssetClient::new(&s.env, &s.token.address)
+        .mint(&s.client.address, &1);
+    let m = s.members.get(0).unwrap();
+    let share = s.client.calculate_exit_share(&m);
+    assert_eq!(
+        share, FEE,
+        "exit share must round down, leaving remainder in treasury"
+    );
+}

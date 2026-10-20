@@ -149,6 +149,39 @@ i.e. `k` bonus votes cost `STAKE_WEIGHT_UNIT * k * k` staked tokens
 
 ---
 
+## Rounding invariants
+
+### R1 — Rounding direction favours the treasury
+**Statement:** Every division site across the contracts is explicitly specified so that
+rounding favours the DAO treasury:
+- **Member debts and penalties round UP (ceil division):** Borrowers pay at least the
+  exact interest or penalty, and integer truncation cannot be exploited to evade obligations.
+  Specifically: `(a * b + denom - 1) / denom`.
+- **Member payouts and loan disbursements round DOWN (floor division):** Treasury outflows
+  never exceed available or allocated funds, and sub-token remainders are retained by
+  the DAO treasury. Specifically: `a * b / denom`.
+- **Consensus quorum thresholds round UP (ceil division):** Approval bars always meet or
+  exceed the required consensus percentage. Specifically: `(base * threshold + BP - 1) / BP`.
+- **Staking bonuses round DOWN (floor division):** Sub-unit stakes do not grant voting
+  power before `isqrt`. Specifically: `staked / STAKE_WEIGHT_UNIT`.
+
+### Rounding and division inventory
+
+| # | Location | Operation / Expression | Rounding | Category | Treasury Rationale | Test Coverage |
+|---|----------|------------------------|----------|----------|-------------------|---------------|
+| 1 | `contracts/dao/src/loans.rs:25` | `amount * BASIS_POINTS / treasury` | **Floor** | Pricing ratio | Ratio of loan amount to treasury; capped at `BASIS_POINTS`. | ✅ `properties::loan_terms_rate_stays_within_policy_bounds` |
+| 2 | `contracts/dao/src/loans.rs:34` | `loan_ratio * spread / BASIS_POINTS` | **Floor** | Pricing rate | Added interest rate scaling within policy spread. | ✅ `properties::loan_terms_rate_stays_within_policy_bounds` |
+| 3 | `contracts/dao/src/loans.rs:43` | `(amount * rate + BASIS_POINTS - 1) / BASIS_POINTS` | **Ceil (UP)** | Member Debt | Loan interest owed to treasury; rounds up so treasury receives full interest. | ✅ `tests::loans::loan_interest_rounds_up_to_favour_treasury` |
+| 4 | `contracts/dao/src/loans.rs:121` | `treasury * max_loan_to_treasury_ratio / BASIS_POINTS` | **Floor (DOWN)** | Treasury Outflow | Max loan disbursement cap; rounds down to protect treasury reserves. | ✅ `tests::loans::loan_exceeds_treasury_ratio` |
+| 5 | `contracts/dao/src/loans.rs:524` | `(outstanding * default_penalty_bps + BASIS_POINTS - 1) / BASIS_POINTS` | **Ceil (UP)** | Member Debt | Overdue penalty added on late repayment; rounds up to favour treasury. | ✅ `tests::loans::overdue_penalty_rounds_up_to_favour_treasury` |
+| 6 | `contracts/dao/src/loans.rs:643` | `(contribution * default_penalty_bps + BASIS_POINTS - 1) / BASIS_POINTS` | **Ceil (UP)** | Member Debt | Default penalty slashed from borrower contribution; rounds up to protect treasury. | ✅ `tests::loans::default_penalty_rounds_up_to_favour_treasury` |
+| 7 | `contracts/dao/src/loans.rs:686` | `total_interest / active_members` | **Floor (DOWN)** | Member Payout | Per-member yield distribution; rounds down and remainder is stored in `yield_remainder` (Invariant A1). | ✅ `properties::distributed_interest_never_exceeds_collected` |
+| 8 | `contracts/dao/src/membership.rs:154` | `treasury * contribution / total_contributions` | **Floor (DOWN)** | Member Payout | Pro-rata exit share; rounds down so total exit shares never exceed treasury (Invariant A2). | ✅ `tests::membership::exit_share_rounds_down_to_favour_treasury`, `properties::exit_shares_never_exceed_treasury` |
+| 9 | `contracts/dao/src/util.rs:129` | `staked / STAKE_WEIGHT_UNIT` | **Floor (DOWN)** | Governance | Stake weight bonus units before `isqrt`; prevents partial units from granting unearned votes. | ✅ `properties::boost_is_constant_within_each_square_band` |
+| 10 | `contracts/dao/src/util.rs:185` | `(base * threshold_bps + BASIS_POINTS - 1) / BASIS_POINTS` | **Ceil (UP)** | Governance | Minimum required votes for consensus quorum; rounds up to strictly enforce voting threshold. | ✅ `tests::loans::loan_proposal_uses_dynamic_quorum_threshold` |
+
+---
+
 ## Notes for contributors
 
 1. Before changing any code path that touches treasury accounting, staking,

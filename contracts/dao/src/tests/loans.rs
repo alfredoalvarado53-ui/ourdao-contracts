@@ -993,3 +993,78 @@ fn cancel_loan_proposal_by_non_proposer_rejected() {
     let res = s.client.try_cancel_loan_proposal(&other, &pid);
     assert_eq!(res, Err(Ok(Error::NotBorrower)));
 }
+
+// ==================== issue #325: rounding direction ====================
+
+#[test]
+fn loan_interest_rounds_up_to_favour_treasury() {
+    let s = setup(3);
+    // Loan terms for an amount where (amount * rate) is not a multiple of BASIS_POINTS (10_000).
+    // Minimum interest rate is 500 bps (5%).
+    // For amount = 1: 1 * 500 / 10_000 = 0.05. Floor would yield 0, but ceil gives 1.
+    let terms = s.client.calculate_loan_terms(&1);
+    assert!(terms.interest_rate >= 500);
+    assert!(terms.total_repayment >= 2);
+    let interest = terms.total_repayment - 1;
+    assert_eq!(
+        interest, 1,
+        "interest must round up to 1 instead of flooring to 0"
+    );
+}
+
+#[test]
+fn overdue_penalty_rounds_up_to_favour_treasury() {
+    let s = setup(3);
+    let borrower = s.members.get(0).unwrap();
+    let v1 = s.members.get(1).unwrap();
+    let v2 = s.members.get(2).unwrap();
+
+    let pid = s.client.request_loan(&borrower, &500, &None);
+    advance(&s.env, EDITING + 1);
+    s.client.vote_on_loan_proposal(&v1, &pid, &true);
+    s.client.vote_on_loan_proposal(&v2, &pid, &true);
+
+    let loan = s.client.get_loan(&pid).unwrap();
+    // Repay all but 1 stroop of the loan so outstanding is 1.
+    let partial = loan.total_repayment - 1;
+    s.client.repay_loan_partial(&borrower, &pid, &partial);
+
+    // Advance beyond due time so default penalty applies on repayment.
+    advance(&s.env, LOAN_DURATION + 1);
+    let loan_overdue = s.client.get_loan(&pid).unwrap();
+    let outstanding_before = loan_overdue.total_repayment - loan_overdue.amount_repaid;
+    assert_eq!(outstanding_before, 1);
+
+    // Overdue penalty: default_penalty_bps = 2_000 (20%).
+    // 1 * 2000 / 10_000 = 0.2. Floor would give 0 penalty, but ceil gives 1.
+    s.client.repay_loan(&borrower, &pid);
+    let loan_after = s.client.get_loan(&pid).unwrap();
+    assert_eq!(loan_after.status, LoanStatus::Repaid);
+    // Total repayment was bumped by 1 (penalty ceil-rounded to 1).
+    assert_eq!(loan_after.total_repayment, loan.total_repayment + 1);
+}
+
+#[test]
+fn default_penalty_rounds_up_to_favour_treasury() {
+    let s = setup(3);
+    let borrower = s.members.get(0).unwrap();
+    let v1 = s.members.get(1).unwrap();
+    let v2 = s.members.get(2).unwrap();
+
+    let pid = s.client.request_loan(&borrower, &500, &None);
+    advance(&s.env, EDITING + 1);
+    s.client.vote_on_loan_proposal(&v1, &pid, &true);
+    s.client.vote_on_loan_proposal(&v2, &pid, &true);
+
+    // Advance beyond due_time + default_grace_period to mark defaulted.
+    advance(&s.env, LOAN_DURATION + LOAN_DURATION + 1);
+
+    let contribution_before = s.client.get_member(&borrower).unwrap().contribution;
+    s.client.mark_loan_defaulted(&pid);
+
+    let member = s.client.get_member(&borrower).unwrap();
+    // default_penalty_bps = 2_000 (20%).
+    // Ceil rounding: (contribution_before * 2000 + 10000 - 1) / 10000.
+    let expected_penalty = (contribution_before * 2_000 + 10_000 - 1) / 10_000;
+    assert_eq!(member.contribution, contribution_before - expected_penalty);
+}
