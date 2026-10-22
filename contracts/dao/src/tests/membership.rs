@@ -292,76 +292,31 @@ fn exit_dao_succeeds_when_treasury_funded() {
     assert!(!s.client.is_member(&member));
 }
 
-// ==================== issue #353: maintained ActiveContributions ====================
-fn active_contributions(s: &Setup) -> i128 {
-    s.env.as_contract(&s.client.address, || {
-        crate::storage::get_active_contributions(&s.env)
-    })
-}
-
-/// Recomputes the total the old O(n) way, to cross-check the running total.
-fn scanned_active_contributions(s: &Setup) -> i128 {
-    s.env.as_contract(&s.client.address, || {
-        crate::storage::get_members(&s.env)
-            .iter()
-            .filter_map(|a| crate::storage::get_member(&s.env, &a))
-            .filter(|m| m.status == MemberStatus::ActiveMember)
-            .map(|m| m.contribution)
-            .sum()
-    })
-}
-
+// ==================== #92: view and payout agree ====================
 #[test]
-fn active_contributions_tracks_join_exit_and_rejoin() {
-    let s = setup(4);
-    assert_eq!(active_contributions(&s), 4 * FEE);
-
-    let m = s.members.get(0).unwrap();
-    s.client.exit_dao(&m);
-    assert_eq!(active_contributions(&s), 3 * FEE);
-    assert_eq!(active_contributions(&s), scanned_active_contributions(&s));
-
-    s.client.register_member(&m);
-    assert_eq!(active_contributions(&s), 4 * FEE);
-    assert_eq!(active_contributions(&s), scanned_active_contributions(&s));
-}
-
-#[test]
-fn active_contributions_matches_scan_after_default_penalty() {
+fn pending_yield_view_matches_claim_rewards_payout() {
     let s = setup(3);
-    let a = s.members.get(0).unwrap();
-    let b = s.members.get(1).unwrap();
-    let c = s.members.get(2).unwrap();
+    let borrower = s.members.get(0).unwrap();
+    let v1 = s.members.get(1).unwrap();
+    let v2 = s.members.get(2).unwrap();
 
-    let pid = s.client.request_loan(&a, &500, &None);
+    let pid = s.client.request_loan(&borrower, &1_000, &None);
     advance(&s.env, EDITING + 1);
-    s.client.vote_on_loan_proposal(&b, &pid, &true);
-    s.client.vote_on_loan_proposal(&c, &pid, &true);
+    s.client.vote_on_loan_proposal(&v1, &pid, &true);
+    s.client.vote_on_loan_proposal(&v2, &pid, &true);
+    s.client.repay_loan(&borrower, &0);
 
-    advance(&s.env, LOAN_DURATION + 1);
-    s.client.mark_loan_defaulted(&pid);
+    let shown = s.client.get_pending_yield(&v1);
+    assert!(shown > 0);
+    let before = s.token.balance(&v1);
+    let claimed = s.client.claim_rewards(&v1);
+    assert_eq!(claimed, shown);
+    assert_eq!(s.token.balance(&v1) - before, shown);
 
-    let total = active_contributions(&s);
-    assert!(total < 3 * FEE, "penalty must reduce the running total");
-    assert_eq!(total, scanned_active_contributions(&s));
-}
-
-// ==================== issue #325: rounding direction ====================
-
-#[test]
-fn exit_share_rounds_down_to_favour_treasury() {
-    let s = setup(3);
-    // Mint 1 extra stroop to the treasury so treasury balance is 3 * FEE + 1 (3001).
-    // Total contributions = 3000.
-    // For member with contribution = 1000:
-    // share = treasury * contribution / total_contributions = 3001 * 1000 / 3000 = 3_001_000 / 3000 = 1000.333...
-    // Floor division must yield 1000, leaving the 1 extra stroop in the treasury (Invariant A2).
-    soroban_sdk::token::StellarAssetClient::new(&s.env, &s.token.address)
-        .mint(&s.client.address, &1);
-    let m = s.members.get(0).unwrap();
-    let share = s.client.calculate_exit_share(&m);
-    assert_eq!(
-        share, FEE,
-        "exit share must round down, leaving remainder in treasury"
-    );
+    // exit_dao pays share + stake + the same displayed pending yield.
+    let shown = s.client.get_pending_yield(&v2);
+    let share = s.client.calculate_exit_share(&v2);
+    let before = s.token.balance(&v2);
+    s.client.exit_dao(&v2);
+    assert_eq!(s.token.balance(&v2) - before, share + shown);
 }

@@ -65,10 +65,12 @@ pub fn register_name(env: &Env, owner: Address, name: String) -> Result<(), Erro
     Ok(())
 }
 
-pub fn resolve_name(env: &Env, name: String) -> Option<Address> {
-    storage::get_name_owner(env, &name)
+pub fn resolve_name(env: &Env, name: String) -> Result<Option<Address>, Error> {
+    util::require_initialized(env)?;
+    Ok(storage::get_name_owner(env, &name))
 }
 
-pub fn name_of(env: &Env, owner: Address) -> Option<String> {
-    storage::get_name_of(env, &owner)
+pub fn name_of(env: &Env, owner: Address) -> Result<Option<String>, Error> {
+    util::require_initialized(env)?;
+    Ok(storage::get_name_of(env, &owner))
 }

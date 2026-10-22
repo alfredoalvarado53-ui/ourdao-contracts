@@ -182,3 +182,71 @@ fn name_valid_with_digits_and_separators() {
     s.client.register_name(&owner, &name);
     assert_eq!(s.client.resolve_name(&name), Some(owner.clone()));
 }
+
+// ==================== #88: views on an uninitialized contract ====================
+#[test]
+fn views_return_not_initialized_before_initialize() {
+    use crate::storage::ProposalKind;
+    use crate::{OurDao, OurDaoClient};
+    use soroban_sdk::Env;
+
+    let env = Env::default();
+    let client = OurDaoClient::new(&env, &env.register(OurDao, ()));
+    let who = Address::generate(&env);
+    let name = String::from_str(&env, "alice_dao");
+
+    assert!(!client.is_initialized());
+    assert!(matches!(
+        client.try_resolve_name(&name),
+        Err(Ok(Error::NotInitialized))
+    ));
+    assert!(matches!(
+        client.try_name_of(&who),
+        Err(Ok(Error::NotInitialized))
+    ));
+    assert!(matches!(
+        client.try_get_document(&ProposalKind::Loan, &0),
+        Err(Ok(Error::NotInitialized))
+    ));
+    assert!(matches!(
+        client.try_get_token(),
+        Err(Ok(Error::NotInitialized))
+    ));
+    assert!(matches!(
+        client.try_get_admins(),
+        Err(Ok(Error::NotInitialized))
+    ));
+    assert!(matches!(
+        client.try_is_admin(&who),
+        Err(Ok(Error::NotInitialized))
+    ));
+    assert!(matches!(
+        client.try_get_loan_policy(),
+        Err(Ok(Error::NotInitialized))
+    ));
+    assert!(matches!(
+        client.try_get_consensus_threshold(),
+        Err(Ok(Error::NotInitialized))
+    ));
+    assert!(matches!(
+        client.try_get_treasury_balance(),
+        Err(Ok(Error::NotInitialized))
+    ));
+    assert!(matches!(
+        client.try_calculate_loan_terms(&100),
+        Err(Ok(Error::NotInitialized))
+    ));
+    assert!(matches!(
+        client.try_calculate_exit_share(&who),
+        Err(Ok(Error::NotInitialized))
+    ));
+}
+
+#[test]
+fn initialized_views_still_return_none_for_missing_records() {
+    let s = setup(1);
+    let name = String::from_str(&s.env, "nobody");
+    assert!(s.client.is_initialized());
+    assert_eq!(s.client.resolve_name(&name), None);
+    assert_eq!(s.client.name_of(&Address::generate(&s.env)), None);
+}

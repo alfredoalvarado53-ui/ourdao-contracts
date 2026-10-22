@@ -233,7 +233,74 @@ fn expired_proposal_shows_expired_phase_in_view() {
     advance(&s.env, VOTING_PERIOD + 1);
     let prop = s.client.get_loan_proposal(&pid).unwrap();
     assert_eq!(prop.phase, ProposalPhase::Expired);
+    assert_eq!(prop.status, ProposalStatus::Expired);
+}
+
+// #86: a timed-out proposal and an early-rejected one are told apart by state.
+#[test]
+fn timed_out_proposal_is_stored_expired_with_loan_exp() {
+    let s = setup(3);
+    let borrower = s.members.get(0).unwrap();
+    let pid = s.client.request_loan(&borrower, &500, &None);
+    advance(&s.env, EDITING + VOTING_PERIOD + 2);
+    s.client.expire_loan_proposal(&pid);
+    // Events only reflect the latest invocation, so check before any view call.
+    assert!(emitted(&s.env, "loan_exp"));
+    assert!(!emitted(&s.env, "loan_rej"));
+
+    let prop = s.client.get_loan_proposal(&pid).unwrap();
+    assert_eq!(prop.phase, ProposalPhase::Expired);
+    assert_eq!(prop.status, ProposalStatus::Expired);
+}
+
+#[test]
+fn early_rejected_proposal_is_stored_rejected_with_loan_rej() {
+    let s = setup(3);
+    let borrower = s.members.get(0).unwrap();
+    let v1 = s.members.get(1).unwrap();
+    let v2 = s.members.get(2).unwrap();
+    let pid = s.client.request_loan(&borrower, &500, &None);
+    advance(&s.env, EDITING + 1);
+    s.client.vote_on_loan_proposal(&v1, &pid, &false);
+    s.client.vote_on_loan_proposal(&v2, &pid, &false);
+    s.client.vote_on_loan_proposal(&borrower, &pid, &false);
+    assert!(emitted(&s.env, "loan_rej"));
+    assert!(!emitted(&s.env, "loan_exp"));
+
+    let prop = s.client.get_loan_proposal(&pid).unwrap();
+    assert_eq!(prop.phase, ProposalPhase::Expired);
     assert_eq!(prop.status, ProposalStatus::Rejected);
+}
+
+// #89: a defaulter forfeits yield accrued but unclaimed at the moment of default.
+#[test]
+fn defaulter_forfeits_unclaimed_yield() {
+    let s = setup(3);
+    let borrower = s.members.get(0).unwrap();
+    let v1 = s.members.get(1).unwrap();
+    let v2 = s.members.get(2).unwrap();
+
+    // v1 borrows and repays, so every member accrues equal yield.
+    let pid = s.client.request_loan(&v1, &1_000, &None);
+    advance(&s.env, EDITING + 1);
+    s.client.vote_on_loan_proposal(&v2, &pid, &true);
+    s.client.vote_on_loan_proposal(&borrower, &pid, &true);
+    s.client.repay_loan(&v1, &0);
+    let accrued = s.client.get_pending_yield(&borrower);
+    assert!(accrued > 0);
+    assert_eq!(s.client.get_pending_yield(&v2), accrued);
+
+    // The borrower takes a loan and defaults: unclaimed yield is forfeited,
+    // everyone else's is untouched.
+    let pid = s.client.request_loan(&borrower, &500, &None);
+    advance(&s.env, EDITING + 1);
+    s.client.vote_on_loan_proposal(&v1, &pid, &true);
+    s.client.vote_on_loan_proposal(&v2, &pid, &true);
+    advance(&s.env, LOAN_DURATION + 1);
+    s.client.mark_loan_defaulted(&1);
+
+    assert_eq!(s.client.get_pending_yield(&borrower), 0);
+    assert_eq!(s.client.get_pending_yield(&v2), accrued);
 }
 
 #[test]

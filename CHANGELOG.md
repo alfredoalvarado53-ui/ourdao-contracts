@@ -55,7 +55,10 @@ All notable changes to `ourdao-contracts` are documented here. The format follow
 - PR template: checkboxes for "single issue only" and "ABI/event changes" (#382).
 
 ### Changed
-- `request_loan` and `propose_treasury_withdrawal` now delegate to their `_in_asset` versions with the base token; behaviour and events are unchanged.
+- Pending yield has a single definition (`membership::compute_pending_yield`) shared by `get_pending_yield`, `claim_rewards` and `exit_dao` (#92).
+- Loan proposals that time out without quorum are now stored as `status = Expired` (previously `Rejected`), matching `phase` and the `loan_exp` event; early rejection stays `Rejected` / `loan_rej` (#86).
+- Defaulting a loan forfeits the borrower's unclaimed yield; yield stays equal-split and exit share stays contribution-weighted, now documented in the README (#89).
+- **ABI:** config and registry views (`get_token`, `get_admins`, `is_admin`, `get_loan_policy`, `get_consensus_threshold`, `get_treasury_balance`, `calculate_loan_terms`, `calculate_exit_share`, `resolve_name`, `name_of`, `get_document`) now return `Result` and yield `NotInitialized` on an uninitialized contract; new `is_initialized` view (#88).
 - `Member.join_ledger` renamed to `join_time` (#55).
 - Staking boost is quadratic instead of linear: `voting_weight` is now `1 + min(isqrt(stake / 100), 5)`, so the *k*-th bonus vote costs `k² × 100` staked tokens and a whale can no longer buy proportional control (#182).
 - Admin policy bounds tightened (#53, #54); loan eligibility checks and the `is_eligible_for_loan` signature corrected (#52, #56).

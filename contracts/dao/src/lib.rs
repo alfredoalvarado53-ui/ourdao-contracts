@@ -324,11 +324,11 @@ impl OurDao {
         registry::register_name(&env, owner, name)
     }
 
-    pub fn resolve_name(env: Env, name: String) -> Option<Address> {
+    pub fn resolve_name(env: Env, name: String) -> Result<Option<Address>, Error> {
         registry::resolve_name(&env, name)
     }
 
-    pub fn name_of(env: Env, owner: Address) -> Option<String> {
+    pub fn name_of(env: Env, owner: Address) -> Result<Option<String>, Error> {
         registry::name_of(&env, owner)
     }
 
@@ -365,11 +365,20 @@ impl OurDao {
         docs::attach_document(&env, caller, kind, proposal_id, content_hash)
     }
 
-    pub fn get_document(env: Env, kind: ProposalKind, proposal_id: u32) -> Option<Bytes> {
+    pub fn get_document(
+        env: Env,
+        kind: ProposalKind,
+        proposal_id: u32,
+    ) -> Result<Option<Bytes>, Error> {
         docs::get_document(&env, kind, proposal_id)
     }
 
     // ==================== views ====================
+    //
+    // Rule: a view that reads DAO configuration or the registry returns
+    // `Err(Error::NotInitialized)` on an uninitialized contract. Per-key
+    // lookups (`get_member`, `get_loan`, ...) keep returning `None`; use
+    // `is_initialized` to tell a missing record from a wrong address.
 
     pub fn get_member(env: Env, address: Address) -> Option<Member> {
         storage::get_member(&env, &address)
@@ -420,20 +429,23 @@ impl OurDao {
         storage::get_proposal_count(&env, storage::DataKey::NextTreasuryId)
     }
 
-    pub fn get_loan_policy(env: Env) -> LoanPolicy {
-        storage::get_policy(&env)
+    pub fn get_loan_policy(env: Env) -> Result<LoanPolicy, Error> {
+        util::require_initialized(&env)?;
+        Ok(storage::get_policy(&env))
     }
 
     pub fn get_pending_policy_update(env: Env) -> Option<PendingPolicyUpdate> {
         admin::get_pending_policy_update(&env)
     }
 
-    pub fn get_admins(env: Env) -> Vec<Address> {
-        storage::get_admins(&env)
+    pub fn get_admins(env: Env) -> Result<Vec<Address>, Error> {
+        util::require_initialized(&env)?;
+        Ok(storage::get_admins(&env))
     }
 
-    pub fn is_admin(env: Env, address: Address) -> bool {
-        util::is_admin(&env, &address)
+    pub fn is_admin(env: Env, address: Address) -> Result<bool, Error> {
+        util::require_initialized(&env)?;
+        Ok(util::is_admin(&env, &address))
     }
 
     pub fn is_member(env: Env, address: Address) -> bool {
@@ -447,8 +459,9 @@ impl OurDao {
         loans::is_eligible_for_loan(&env, &member)
     }
 
-    pub fn get_treasury_balance(env: Env) -> i128 {
-        util::treasury_balance(&env)
+    pub fn get_treasury_balance(env: Env) -> Result<i128, Error> {
+        util::require_initialized(&env)?;
+        Ok(util::treasury_balance(&env))
     }
 
     /// Returns the treasury balance held in a specific whitelisted asset.
@@ -464,12 +477,22 @@ impl OurDao {
         storage::get_active_members(&env)
     }
 
-    pub fn get_consensus_threshold(env: Env) -> u32 {
-        storage::get_threshold(&env)
+    pub fn get_consensus_threshold(env: Env) -> Result<u32, Error> {
+        util::require_initialized(&env)?;
+        Ok(storage::get_threshold(&env))
     }
 
-    pub fn get_token(env: Env) -> Address {
-        storage::get_token(&env)
+    pub fn get_token(env: Env) -> Result<Address, Error> {
+        util::require_initialized(&env)?;
+        Ok(storage::get_token(&env))
+    }
+
+    /// Whether `initialize` has run. Clients should check this before relying
+    /// on any other view: every state-reading view returns
+    /// `Error::NotInitialized` on an uninitialized contract rather than
+    /// trapping or returning an ambiguous empty value.
+    pub fn is_initialized(env: Env) -> bool {
+        storage::is_initialized(&env)
     }
 
     /// Headline DAO state in one call (#339): membership counts, spendable
@@ -555,9 +578,7 @@ impl OurDao {
     }
 
     pub fn get_pending_yield(env: Env, member: Address) -> i128 {
-        let acc = storage::get_yield_accumulator(&env);
-        let snap = storage::get_yield_snapshot(&env, &member);
-        (acc - snap).max(0)
+        membership::compute_pending_yield(&env, &member)
     }
 
     /// Returns the address `delegator` has delegated their vote to, or `None`
@@ -585,12 +606,14 @@ impl OurDao {
         }
     }
 
-    pub fn calculate_loan_terms(env: Env, amount: i128) -> LoanTerms {
-        loans::calculate_loan_terms(&env, amount)
+    pub fn calculate_loan_terms(env: Env, amount: i128) -> Result<LoanTerms, Error> {
+        util::require_initialized(&env)?;
+        Ok(loans::calculate_loan_terms(&env, amount))
     }
 
-    pub fn calculate_exit_share(env: Env, member: Address) -> i128 {
-        membership::calculate_exit_share(&env, &member)
+    pub fn calculate_exit_share(env: Env, member: Address) -> Result<i128, Error> {
+        util::require_initialized(&env)?;
+        Ok(membership::calculate_exit_share(&env, &member))
     }
 
     // ==================== paginated list views (#334 / #335) ====================
