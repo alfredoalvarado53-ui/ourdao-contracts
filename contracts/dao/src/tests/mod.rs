@@ -9,4 +9,8 @@ mod properties;
 mod registry;
 mod staking;
 mod treasury;
+mod issue309_policy_timelock;
+mod issue310_snapshot;
+mod issue311_budget;
+mod issue313_thresholds;
 mod ttl;
