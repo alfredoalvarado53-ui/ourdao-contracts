@@ -162,10 +162,16 @@ pub fn claim_rewards(env: &Env, member: Address) -> Result<i128, Error> {
 }
 
 fn share_from_contributions(treasury: i128, contribution: i128, total_contributions: i128) -> i128 {
-    if total_contributions == 0 || treasury <= 0 {
+    if total_contributions <= 0 || treasury <= 0 || contribution <= 0 {
         return 0;
     }
-    treasury * contribution / total_contributions
+    // Member payout: floor-division rounds down to favour the treasury.
+    // Sub-token remainders stay in the contract balance so exit shares never
+    // exceed the treasury (Invariant A2).
+    treasury
+        .checked_mul(contribution)
+        .and_then(|v| v.checked_div(total_contributions))
+        .unwrap_or(0)
 }
 
 pub fn calculate_exit_share(env: &Env, member: &Address) -> i128 {

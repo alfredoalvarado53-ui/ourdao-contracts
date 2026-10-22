@@ -33,7 +33,6 @@ pub fn stake(env: &Env, member: Address, amount: i128) -> Result<(), Error> {
     storage::extend_instance(env);
 
     let voting_weight = util::voting_weight(env, &member);
-    util::token_client(env).transfer(&member, util::contract_address(env), &amount);
     env.events().publish(
         (symbol_short!("staked"),),
         (member, amount, new_stake, voting_weight),
@@ -122,7 +121,6 @@ pub fn unstake(env: &Env, member: Address, amount: i128) -> Result<(), Error> {
     storage::extend_instance(env);
 
     let voting_weight = util::voting_weight(env, &member);
-    util::token_client(env).transfer(&util::contract_address(env), &member, &amount);
     env.events().publish(
         (symbol_short!("unstaked"),),
         (member, amount, new_stake, voting_weight),

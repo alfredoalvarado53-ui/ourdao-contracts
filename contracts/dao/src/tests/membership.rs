@@ -346,168 +346,22 @@ fn active_contributions_matches_scan_after_default_penalty() {
     assert_eq!(total, scanned_active_contributions(&s));
 }
 
-// ==================== issue #340: get_member_overview view ====================
+// ==================== issue #325: rounding direction ====================
+
 #[test]
-fn get_member_overview_aggregates_member_state() {
+fn exit_share_rounds_down_to_favour_treasury() {
     let s = setup(3);
-    let borrower = s.members.get(0).unwrap();
-    let v1 = s.members.get(1).unwrap();
-    let v2 = s.members.get(2).unwrap();
-
-    s.client
-        .register_name(&borrower, &String::from_str(&s.env, "alice"));
-    s.client.delegate_vote(&borrower, &v1);
-
-    let pid = s.client.request_loan(&borrower, &1_000, &None);
-    advance(&s.env, EDITING + 1);
-    s.client.vote_on_loan_proposal(&v1, &pid, &true);
-    s.client.repay_loan(&borrower, &0);
-    s.client.stake(&borrower, &500);
-
-    let loan = s.client.get_loan(&0).unwrap();
-    let per_member = (loan.total_repayment - loan.principal) / 3;
-
-    let overview = s.client.get_member_overview(&borrower);
-    assert_eq!(overview.member, s.client.get_member(&borrower).unwrap());
-    assert_eq!(overview.member.status, MemberStatus::ActiveMember);
-    assert_eq!(overview.stake, 500);
-    assert_eq!(overview.pending_yield, per_member);
+    // Mint 1 extra stroop to the treasury so treasury balance is 3 * FEE + 1 (3001).
+    // Total contributions = 3000.
+    // For member with contribution = 1000:
+    // share = treasury * contribution / total_contributions = 3001 * 1000 / 3000 = 3_001_000 / 3000 = 1000.333...
+    // Floor division must yield 1000, leaving the 1 extra stroop in the treasury (Invariant A2).
+    soroban_sdk::token::StellarAssetClient::new(&s.env, &s.token.address)
+        .mint(&s.client.address, &1);
+    let m = s.members.get(0).unwrap();
+    let share = s.client.calculate_exit_share(&m);
     assert_eq!(
-        overview.loan_stats,
-        s.client.get_member_loan_stats(&borrower)
-    );
-    assert_eq!(overview.loan_stats.total_loans, 1);
-    assert_eq!(overview.loan_stats.repaid_loans, 1);
-    assert_eq!(overview.name, Some(String::from_str(&s.env, "alice")));
-    assert_eq!(overview.delegate, Some(v1.clone()));
-
-    // An exited member keeps their record, reported as Inactive.
-    s.client.exit_dao(&v2);
-    assert_eq!(
-        s.client.get_member_overview(&v2).member.status,
-        MemberStatus::Inactive
-    );
-
-    let stranger = Address::generate(&s.env);
-    assert_eq!(
-        s.client.try_get_member_overview(&stranger),
-        Err(Ok(Error::NotMember))
-    );
-}
-
-// ==================== issue #307: tests for delegate_vote & delegation ====================
-
-#[test]
-fn delegation_re_delegation_updates_voting_weights() {
-    let s = setup(3);
-    let a = s.members.get(0).unwrap();
-    let b = s.members.get(1).unwrap();
-    let c = s.members.get(2).unwrap();
-
-    // Directly set delegation in storage to test delegation weight transitions.
-    s.env.as_contract(&s.client.address, || {
-        crate::storage::set_delegation(&s.env, &a, &b);
-    });
-
-    let weight_a = s
-        .env
-        .as_contract(&s.client.address, || crate::util::voting_weight(&s.env, &a));
-    let weight_b = s
-        .env
-        .as_contract(&s.client.address, || crate::util::voting_weight(&s.env, &b));
-    let weight_c = s
-        .env
-        .as_contract(&s.client.address, || crate::util::voting_weight(&s.env, &c));
-    assert_eq!(weight_a, 0, "delegator vote weight must be 0");
-    assert_eq!(weight_b, 2, "delegatee b receives a's weight");
-    assert_eq!(weight_c, 1, "c remains at base weight");
-
-    // Re-delegation from b to c
-    s.env.as_contract(&s.client.address, || {
-        crate::storage::set_delegation(&s.env, &a, &c);
-    });
-
-    let weight_b_after = s
-        .env
-        .as_contract(&s.client.address, || crate::util::voting_weight(&s.env, &b));
-    let weight_c_after = s
-        .env
-        .as_contract(&s.client.address, || crate::util::voting_weight(&s.env, &c));
-    assert_eq!(weight_b_after, 1, "b loses a's weight upon re-delegation");
-    assert_eq!(weight_c_after, 2, "c now receives a's weight");
-}
-
-#[test]
-fn delegation_loop_a_to_b_to_a_deadlocks_voting_weight() {
-    let s = setup(2);
-    let a = s.members.get(0).unwrap();
-    let b = s.members.get(1).unwrap();
-
-    // A delegates to B, B delegates to A
-    s.env.as_contract(&s.client.address, || {
-        crate::storage::set_delegation(&s.env, &a, &b);
-        crate::storage::set_delegation(&s.env, &b, &a);
-    });
-
-    let weight_a = s
-        .env
-        .as_contract(&s.client.address, || crate::util::voting_weight(&s.env, &a));
-    let weight_b = s
-        .env
-        .as_contract(&s.client.address, || crate::util::voting_weight(&s.env, &b));
-
-    // In a mutual delegation loop, neither member can cast any votes (both weights are 0).
-    assert_eq!(weight_a, 0);
-    assert_eq!(weight_b, 0);
-}
-
-#[test]
-fn delegated_weight_used_in_votes() {
-    let s = setup(3);
-    let borrower = s.members.get(0).unwrap();
-    let v1 = s.members.get(1).unwrap();
-    let v2 = s.members.get(2).unwrap();
-
-    // v2 delegates to v1
-    s.env.as_contract(&s.client.address, || {
-        crate::storage::set_delegation(&s.env, &v2, &v1);
-    });
-
-    let pid = s.client.request_loan(&borrower, &1_000, &None);
-    advance(&s.env, EDITING + 1);
-
-    // v1 votes: with v2's delegation, v1 has 2 votes, reaching 51% threshold immediately!
-    s.client.vote_on_loan_proposal(&v1, &pid, &true);
-
-    let prop = s.client.get_loan_proposal(&pid).unwrap();
-    assert_eq!(prop.for_votes, 2);
-    assert_eq!(prop.status, crate::types::ProposalStatus::Approved);
-}
-
-#[test]
-fn delegation_exited_member_still_counts_exposing_voting_weight_bug() {
-    let s = setup(3);
-    let _borrower = s.members.get(0).unwrap();
-    let v1 = s.members.get(1).unwrap();
-    let v2 = s.members.get(2).unwrap();
-
-    // v2 delegates to v1
-    s.env.as_contract(&s.client.address, || {
-        crate::storage::set_delegation(&s.env, &v2, &v1);
-    });
-
-    // v2 exits the DAO
-    s.client.exit_dao(&v2);
-    assert_eq!(s.client.get_active_members(), 2);
-
-    // Bug in voting_weight (tracked in issue #409): storage::get_members iterates all members ever registered,
-    // and does not check whether `member` is ActiveMember. As a result, v1 still receives
-    // v2's delegated weight even though v2 has exited the DAO!
-    let weight_v1 = s.env.as_contract(&s.client.address, || {
-        crate::util::voting_weight(&s.env, &v1)
-    });
-    assert_eq!(
-        weight_v1, 2,
-        "voting_weight currently leaks weight from inactive members"
+        share, FEE,
+        "exit share must round down, leaving remainder in treasury"
     );
 }

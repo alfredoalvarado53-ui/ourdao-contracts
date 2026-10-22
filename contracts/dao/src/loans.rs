@@ -38,10 +38,16 @@ fn quote_terms(env: &Env, amount: i128, treasury: i128) -> LoanTerms {
         .unwrap_or(policy.max_interest_rate as i128)
         .min(policy.max_interest_rate as i128);
 
-    let interest = amount
-        .checked_mul(rate)
-        .map(|v| util::ceil_div_nonnegative(v, BASIS_POINTS))
-        .unwrap_or(i128::MAX - amount);
+    // Member debt: ceil-division rounds up to favour the treasury.
+    let interest = if amount > 0 && rate > 0 {
+        amount
+            .checked_mul(rate)
+            .and_then(|v| v.checked_add(BASIS_POINTS - 1))
+            .and_then(|v| v.checked_div(BASIS_POINTS))
+            .unwrap_or(i128::MAX - amount)
+    } else {
+        0
+    };
     let total_repayment = amount.checked_add(interest).unwrap_or(i128::MAX);
 
     LoanTerms {
@@ -121,7 +127,11 @@ pub fn request_loan_in_asset(
 
     let policy = storage::get_policy(env);
     let treasury = util::treasury_balance_in_asset(env, &asset);
-    let max_loan = treasury * policy.max_loan_to_treasury_ratio as i128 / BASIS_POINTS;
+    // Treasury exposure limit: floor-division rounds down to favour the treasury.
+    let max_loan = treasury
+        .checked_mul(policy.max_loan_to_treasury_ratio as i128)
+        .and_then(|v| v.checked_div(BASIS_POINTS))
+        .unwrap_or(0);
     if amount > max_loan {
         return Err(Error::ExceedsTreasuryRatio);
     }
@@ -545,10 +555,16 @@ fn repay_loan_internal(
     let now = env.ledger().timestamp();
     if now > loan.due_time {
         let policy = storage::get_policy(env);
-        let penalty = util::ceil_div_nonnegative(
-            outstanding * policy.default_penalty_bps as i128,
-            crate::types::BASIS_POINTS,
-        );
+        // Overdue penalty (member debt): ceil-division rounds up to favour the treasury.
+        let penalty = if outstanding > 0 && policy.default_penalty_bps > 0 {
+            outstanding
+                .checked_mul(policy.default_penalty_bps as i128)
+                .and_then(|v| v.checked_add(crate::types::BASIS_POINTS - 1))
+                .and_then(|v| v.checked_div(crate::types::BASIS_POINTS))
+                .unwrap_or(0)
+        } else {
+            0
+        };
         outstanding += penalty;
         loan.total_repayment += penalty;
         loan.principal += penalty; // Keep penalty in treasury, don't distribute as interest
@@ -660,11 +676,18 @@ pub fn mark_loan_defaulted(env: &Env, loan_id: u32) -> Result<(), Error> {
 
     let mut penalty: i128 = 0;
     if let Some(mut member) = storage::get_member(env, &loan.borrower) {
-        penalty = util::ceil_div_nonnegative(
-            member.contribution * policy.default_penalty_bps as i128,
-            BASIS_POINTS,
-        )
-        .min(member.contribution);
+        // Default slashing penalty (member debt to treasury): ceil-division rounds up to favour the treasury.
+        penalty = if member.contribution > 0 && policy.default_penalty_bps > 0 {
+            member
+                .contribution
+                .checked_mul(policy.default_penalty_bps as i128)
+                .and_then(|v| v.checked_add(BASIS_POINTS - 1))
+                .and_then(|v| v.checked_div(BASIS_POINTS))
+                .unwrap_or(member.contribution)
+                .min(member.contribution)
+        } else {
+            0
+        };
         member.contribution -= penalty;
         member.has_active_loan = false;
         // Defaulted loans are terminal but were never repaid, so only the
