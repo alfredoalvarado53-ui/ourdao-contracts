@@ -239,6 +239,58 @@ fn quadrupling_stake_doubles_the_boost() {
     }
 }
 
+// ==================== issue #303: boundary tests for staking curve ====================
+#[test]
+fn staking_curve_boundary_tests() {
+    // Test boundary at 5 bonus votes (MAX_STAKE_BONUS).
+    // Formula: k bonus votes cost k^2 * STAKE_WEIGHT_UNIT tokens.
+    // At k=5: need 5^2 * 100 = 2500 tokens for exactly 5 bonus votes.
+    let at_5_bonus = STAKE_WEIGHT_UNIT * 5 * 5; // 2500
+    assert_eq!(stake_boost(at_5_bonus), 5);
+
+    // Just below 5 bonus votes: at 2499 tokens, should get 4 bonus votes.
+    let below_5_bonus = at_5_bonus - 1;
+    assert_eq!(stake_boost(below_5_bonus), 4);
+
+    // Above the 5-bonus cap: at 6^2 * 100 = 3600 tokens, should still be capped at 5.
+    let above_5_bonus = STAKE_WEIGHT_UNIT * 6 * 6; // 3600
+    assert_eq!(stake_boost(above_5_bonus), 5);
+
+    // Even at much higher stakes, the boost is capped at MAX_STAKE_BONUS (5).
+    assert_eq!(stake_boost(STAKE_WEIGHT_UNIT * 10 * 10), 5);
+    assert_eq!(stake_boost(STAKE_WEIGHT_UNIT * 100 * 100), 5);
+}
+
+#[test]
+fn staking_curve_boundary_voting_weight() {
+    let s = setup(2);
+    let staker = s.members.get(0).unwrap();
+    let borrower = s.members.get(1).unwrap();
+
+    // Stake at the 5-bonus boundary: 2500 tokens = 5 bonus votes + 1 base = 6 voting weight.
+    let at_5_bonus = STAKE_WEIGHT_UNIT * 5 * 5; // 2500
+    s.client.stake(&staker, &at_5_bonus);
+
+    let pid = s.client.request_loan(&borrower, &500, &None);
+    advance(&s.env, EDITING + 1);
+    s.client.vote_on_loan_proposal(&staker, &pid, &true);
+
+    let prop = s.client.get_loan_proposal(&pid).unwrap();
+    assert_eq!(prop.for_votes, 6); // 1 base + 5 bonus
+
+    // Stake above the cap: 3600 tokens should still give only 5 bonus votes = 6 voting weight.
+    s.client.unstake(&staker, &at_5_bonus);
+    let above_5_bonus = STAKE_WEIGHT_UNIT * 6 * 6; // 3600
+    s.client.stake(&staker, &above_5_bonus);
+
+    let pid2 = s.client.request_loan(&borrower, &500, &None);
+    advance(&s.env, EDITING + 1);
+    s.client.vote_on_loan_proposal(&staker, &pid2, &true);
+
+    let prop2 = s.client.get_loan_proposal(&pid2).unwrap();
+    assert_eq!(prop2.for_votes, 6); // Still capped at 1 base + 5 bonus
+}
+
 #[test]
 fn voting_weight_is_capped_above_the_square_root_curve() {
     let env = Env::default();

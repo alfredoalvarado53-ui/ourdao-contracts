@@ -186,6 +186,65 @@ fn bench_exit_dao_scaling() {
     }
 }
 
+// ==================== issue #304: rejoin resets state ====================
+#[test]
+fn rejoin_after_exit_resets_share_stake_yield_snapshot_and_name() {
+    let s = setup(3);
+    let m = s.members.get(0).unwrap();
+    let borrower = s.members.get(1).unwrap();
+    let voter = s.members.get(2).unwrap();
+
+    // Register a name for the member.
+    let name = String::from_str(&s.env, "alice");
+    s.client.register_name(&m, &name);
+    assert_eq!(s.client.name_of(&m), Some(name.clone()));
+
+    // Member stakes.
+    s.client.stake(&m, &500);
+    assert_eq!(s.client.get_stake(&m), 500);
+
+    // Generate yield by creating a loan and having it repaid.
+    let pid = s.client.request_loan(&borrower, &1_000, &None);
+    advance(&s.env, EDITING + 1);
+    s.client.vote_on_loan_proposal(&voter, &pid, &true);
+    s.client.vote_on_loan_proposal(&m, &pid, &true);
+    s.client.repay_loan(&borrower, &0);
+
+    let loan = s.client.get_loan(&0).unwrap();
+    let interest = loan.total_repayment - loan.principal;
+    let per_member_yield = interest / 3;
+    assert!(per_member_yield > 0);
+
+    // Member claims their yield.
+    s.client.claim_rewards(&m);
+
+    let pending_before_exit = s.client.get_pending_yield(&m);
+    assert_eq!(pending_before_exit, 0);
+
+    // Member exits the DAO.
+    s.client.exit_dao(&m);
+    assert!(!s.client.is_member(&m));
+    assert_eq!(s.client.get_stake(&m), 0);
+    assert_eq!(s.client.get_pending_yield(&m), 0);
+    // After exiting, the name should be freed.
+    assert_eq!(s.client.name_of(&m), None);
+    assert_eq!(s.client.resolve_name(&name), None);
+
+    // Member rejoins.
+    s.client.register_member(&m);
+    assert!(s.client.is_member(&m));
+
+    // Verify all state is reset:
+    // - Stake is zero.
+    assert_eq!(s.client.get_stake(&m), 0);
+    // - Yield snapshot is reset to current accumulator (so pending is zero).
+    assert_eq!(s.client.get_pending_yield(&m), 0);
+    // - Name is freed and can be re-registered.
+    assert_eq!(s.client.name_of(&m), None);
+    s.client.register_name(&m, &name);
+    assert_eq!(s.client.name_of(&m), Some(name));
+}
+
 #[test]
 fn rejected_register_member_transfer_rolls_back_all_membership_state() {
     let s = rejecting_setup(0);
