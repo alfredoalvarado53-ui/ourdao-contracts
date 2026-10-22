@@ -100,6 +100,18 @@ pub fn exit_dao(env: &Env, member: Address) -> Result<(), Error> {
     let acc = storage::get_yield_accumulator(env);
     storage::set_yield_snapshot(env, &member, acc);
 
+    // Release the member's name so they can re-register after rejoining.
+    if let Some(name) = storage::get_name_of(env, &member) {
+        env.storage()
+            .persistent()
+            .remove(&storage::DataKey::Name(name.clone()));
+        env.storage()
+            .persistent()
+            .remove(&storage::DataKey::NameOf(member.clone()));
+        env.events()
+            .publish((symbol_short!("name_rel"),), (name, member.clone()));
+    }
+
     record.status = MemberStatus::Inactive;
     record.share_balance = 0;
     // `share` was computed above against the total that still included this
