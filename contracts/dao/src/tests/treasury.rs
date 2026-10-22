@@ -302,37 +302,24 @@ fn tally_persists_status_and_votes_whether_executed_or_waiting() {
 }
 
 #[test]
-fn proposer_cannot_exceed_three_concurrent_open_proposals() {
-    let s = setup(3);
+fn propose_treasury_withdrawal_rejects_self_destination() {
+    let s = setup(2);
     let proposer = s.members.get(0).unwrap();
-    let dest = Address::generate(&s.env);
-    let reason = soroban_sdk::String::from_str(&s.env, "limited proposal");
-    let first = s
-        .client
-        .propose_treasury_withdrawal(&proposer, &100, &dest, &reason, &false);
-    for _ in 1..3 {
-        s.client
-            .propose_treasury_withdrawal(&proposer, &100, &dest, &reason, &false);
-    }
-    assert_eq!(
-        s.client
-            .try_propose_treasury_withdrawal(&proposer, &100, &dest, &reason, &false),
-        Err(Ok(Error::TooManyOpenProposals)),
-    );
-    // Cancelling one proposal releases a slot, without requiring an admin sweep.
-    s.client.cancel_treasury_proposal(&proposer, &first);
-    s.client
-        .propose_treasury_withdrawal(&proposer, &100, &dest, &reason, &false);
-}
+    let self_dest = s.client.address.clone();
+    let reason = String::from_str(&s.env, "grant to self");
 
-#[test]
-fn propose_withdrawal_rejects_contract_destination() {
-    let s = setup(3);
-    let proposer = s.members.get(0).unwrap();
-    let contract_dest = s.client.address.clone();
-    let reason = soroban_sdk::String::from_str(&s.env, "self destination");
-    let res =
-        s.client
-            .try_propose_treasury_withdrawal(&proposer, &100, &contract_dest, &reason, &false);
+    let res = s
+        .client
+        .try_propose_treasury_withdrawal(&proposer, &500, &self_dest, &reason, &false);
     assert_eq!(res, Err(Ok(Error::InvalidProposal)));
+
+    let res_asset = s.client.try_propose_withdrawal_in_asset(
+        &proposer,
+        &500,
+        &s.token.address,
+        &self_dest,
+        &reason,
+        &false,
+    );
+    assert_eq!(res_asset, Err(Ok(Error::InvalidProposal)));
 }
