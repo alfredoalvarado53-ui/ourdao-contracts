@@ -1,0 +1,18 @@
+# Configuration for cargo-mutants mutation testing
+
+# Exclude test files and specific patterns
+exclude = [
+    "tests/",
+    "benches/",
+]
+
+# Timeout for test execution (in seconds)
+timeout = 60
+
+# Skip certain mutation operators if desired
+# skip_operators = [
+#     "ConditionalBoundary",
+# ]
+
+# Include only specific crates
+# filter = "ourdao-dao"
