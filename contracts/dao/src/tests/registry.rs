@@ -6,17 +6,35 @@ use crate::Error;
 
 #[test]
 fn name_registry() {
-    let s = setup(1);
+    let s = setup(2);
     let owner = s.members.get(0).unwrap();
     let name = String::from_str(&s.env, "alice_dao");
     s.client.register_name(&owner, &name);
     assert_eq!(s.client.resolve_name(&name), Some(owner.clone()));
     assert_eq!(s.client.name_of(&owner), Some(name.clone()));
 
-    // A different owner cannot claim the same name.
-    let other = Address::generate(&s.env);
+    // A different active member cannot claim the same name.
+    let other = s.members.get(1).unwrap();
     let res = s.client.try_register_name(&other, &name);
     assert_eq!(res, Err(Ok(Error::NameTaken)));
+}
+
+#[test]
+fn non_member_and_exited_member_cannot_register_name() {
+    let s = setup(2);
+    let non_member = Address::generate(&s.env);
+    let name = String::from_str(&s.env, "outsider");
+    assert_eq!(
+        s.client.try_register_name(&non_member, &name),
+        Err(Ok(Error::NotMember))
+    );
+
+    let exiting = s.members.get(1).unwrap();
+    s.client.exit_dao(&exiting);
+    assert_eq!(
+        s.client.try_register_name(&exiting, &name),
+        Err(Ok(Error::MemberNotActive))
+    );
 }
 
 #[test]

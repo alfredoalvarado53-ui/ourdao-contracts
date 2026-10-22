@@ -15,7 +15,7 @@ use crate::util;
 pub fn register_name(env: &Env, owner: Address, name: String) -> Result<(), Error> {
     util::require_initialized(env)?;
     util::require_not_paused(env)?;
-    util_owner_auth(&owner);
+    util::require_active_member(env, &owner)?;
 
     // Validate length bounds.
     let len = name.len();
@@ -71,8 +71,4 @@ pub fn resolve_name(env: &Env, name: String) -> Option<Address> {
 
 pub fn name_of(env: &Env, owner: Address) -> Option<String> {
     storage::get_name_of(env, &owner)
-}
-
-fn util_owner_auth(owner: &Address) {
-    owner.require_auth();
 }
