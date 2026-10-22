@@ -372,8 +372,9 @@ fn validate_policy_rejects_quorum_bps_above_basis_points() {
     assert_eq!(res, Err(Ok(Error::InvalidLoanPolicy)));
 }
 
+// Issue #320: Validate quorum_bps within 1..=10000 on policy updates
 #[test]
-fn validate_policy_rejects_quorum_bps_zero() {
+fn validate_policy_rejects_zero_quorum_bps() {
     let mut p = policy();
     p.quorum_bps = 0;
     let s = setup(1);
@@ -430,6 +431,7 @@ fn policy_update_timelock_enforced() {
     let mut new_p = policy();
     new_p.quorum_bps = 5_000;
     new_p.max_loan_duration = 60 * 24 * 60 * 60; // change duration
+    new_p.quorum_bps = 5_100;
 
     // Non-admin cannot propose policy update
     let err = s.client.try_propose_policy_update(&non_admin, &new_p);
@@ -482,6 +484,7 @@ fn policy_update_cancel_by_admin() {
     let mut new_p = policy();
     new_p.quorum_bps = 5_000;
     new_p.min_interest_rate = 1_000;
+    new_p.quorum_bps = 5_100;
 
     s.client.propose_policy_update(&s.admin, &new_p);
     assert!(s.client.get_pending_policy_update().is_some());
