@@ -1,5 +1,6 @@
 version: 2
 updates:
+  # GitHub Actions — group routine bumps into one PR
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
@@ -9,22 +10,17 @@ updates:
         patterns:
           - "*"
 
+  # Cargo — group routine bumps together.
+  # soroban-sdk is excluded from the group so every bump (including majors)
+  # arrives as its own PR for individual review (protocol compatibility).
   - package-ecosystem: "cargo"
     directory: "/"
     schedule:
       interval: "weekly"
-    # CI builds with --locked, so a Dependabot lockfile bump goes through the
-    # same fmt / clippy / test / wasm-build jobs as any other PR.
     groups:
-      cargo:
+      cargo-dependencies:
         patterns:
           - "*"
-        # soroban-sdk carries protocol compatibility changes and the contract
-        # cannot be upgraded once deployed, so its updates (majors included)
-        # arrive as their own PR for individual review.
         exclude-patterns:
           - "soroban-sdk"
-    ignore:
-      # Cargo.lock deliberately pins ed25519-dalek to 2.2.0; a newer release
-      # breaks the soroban-env-host test build (see README, "Known limitations").
-      - dependency-name: "ed25519-dalek"
+    open-pull-requests-limit: 10
