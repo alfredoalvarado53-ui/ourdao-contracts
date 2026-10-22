@@ -55,10 +55,10 @@ fn approved_but_unfundable_treasury_withdrawal_waits_then_executes_after_refill(
     s.client.vote_on_treasury_proposal(&p, &second, &true);
     s.client.vote_on_treasury_proposal(&v1, &second, &true);
     s.client.vote_on_treasury_proposal(&v2, &second, &true); // approved, but only 2000 left
+    assert!(emitted(&s.env, "tre_wait"));
 
     let prop = s.client.get_treasury_proposal(&second).unwrap();
     assert_eq!(prop.status, ProposalStatus::ApprovedPendingDisbursement);
-    assert!(emitted(&s.env, "tre_wait"));
     assert_eq!(s.token.balance(&dest), 2_000); // nothing more moved
     assert_eq!(s.client.get_treasury_balance(), 2_000);
     assert_eq!(
@@ -331,8 +331,8 @@ fn propose_withdrawal_rejects_contract_destination() {
     let proposer = s.members.get(0).unwrap();
     let contract_dest = s.client.address.clone();
     let reason = soroban_sdk::String::from_str(&s.env, "self destination");
-    let res = s
-        .client
-        .try_propose_treasury_withdrawal(&proposer, &100, &contract_dest, &reason, &false);
+    let res =
+        s.client
+            .try_propose_treasury_withdrawal(&proposer, &100, &contract_dest, &reason, &false);
     assert_eq!(res, Err(Ok(Error::InvalidProposal)));
 }

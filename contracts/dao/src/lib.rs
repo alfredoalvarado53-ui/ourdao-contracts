@@ -31,7 +31,9 @@ mod tests;
 mod bench;
 
 use soroban_sdk::{contract, contractimpl, Address, Bytes, BytesN, Env, String, Vec};
-use types::{AssetBalance, DaoSummary, SeedDocEntry, SeedNameEntry, SeedStakeEntry, SeedYieldEntry};
+use types::{
+    AssetBalance, DaoSummary, SeedDocEntry, SeedNameEntry, SeedStakeEntry, SeedYieldEntry,
+};
 
 pub use error::Error;
 pub use storage::ProposalKind;
@@ -629,11 +631,7 @@ impl OurDao {
 
     /// Seeds member records from a prior deployment. Admin-only; rejected after
     /// `lock_seeding()` is called. See `docs/MIGRATION.md` for the full procedure.
-    pub fn seed_members(
-        env: Env,
-        caller: Address,
-        members: Vec<Member>,
-    ) -> Result<(), Error> {
+    pub fn seed_members(env: Env, caller: Address, members: Vec<Member>) -> Result<(), Error> {
         migration::seed_members(&env, caller, members)
     }
 
@@ -657,19 +655,11 @@ impl OurDao {
         migration::seed_loans(&env, caller, loans)
     }
 
-    pub fn seed_names(
-        env: Env,
-        caller: Address,
-        names: Vec<SeedNameEntry>,
-    ) -> Result<(), Error> {
+    pub fn seed_names(env: Env, caller: Address, names: Vec<SeedNameEntry>) -> Result<(), Error> {
         migration::seed_names(&env, caller, names)
     }
 
-    pub fn seed_docs(
-        env: Env,
-        caller: Address,
-        docs: Vec<SeedDocEntry>,
-    ) -> Result<(), Error> {
+    pub fn seed_docs(env: Env, caller: Address, docs: Vec<SeedDocEntry>) -> Result<(), Error> {
         migration::seed_docs(&env, caller, docs)
     }
 

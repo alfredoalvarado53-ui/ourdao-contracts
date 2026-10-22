@@ -470,10 +470,10 @@ fn approved_but_unfundable_loan_waits_then_disburses_after_refill() {
     s.client.vote_on_loan_proposal(&v2, &pid, &true);
     let borrower_bal = s.token.balance(&borrower);
     s.client.vote_on_loan_proposal(&v3, &pid, &true); // reaches the threshold; treasury (1000) < 1500
+    assert!(emitted(&s.env, "loan_wait"));
 
     let prop = s.client.get_loan_proposal(&pid).unwrap();
     assert_eq!(prop.status, ProposalStatus::ApprovedPendingDisbursement);
-    assert!(emitted(&s.env, "loan_wait"));
     // No tokens moved, and no loan/active-loan state was created.
     assert_eq!(s.token.balance(&borrower), borrower_bal);
     assert_eq!(s.client.get_treasury_balance(), 1_000);
