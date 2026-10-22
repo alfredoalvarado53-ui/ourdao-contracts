@@ -242,11 +242,19 @@ pub fn pause(env: &Env, caller: Address) -> Result<(), Error> {
     Ok(())
 }
 
+/// Resumes normal operations from an emergency stop.
+///
+/// Only admins can unpause. An assigned pauser explicitly CANNOT unpause
+/// unless they are also an admin (#319).
 #[allow(deprecated)]
 /// Only an administrator may resume the DAO. The emergency pauser is pause-only.
 /// Keep this check before any state mutation so rejected calls cannot clear a pause.
 pub fn unpause(env: &Env, caller: Address) -> Result<(), Error> {
-    util::require_admin(env, &caller)?;
+    caller.require_auth();
+    // Pausers can trigger pause in an emergency, but only admins can unpause (#319).
+    if !util::is_admin(env, &caller) {
+        return Err(Error::NotAdmin);
+    }
     if !storage::is_paused(env) {
         return Err(Error::NotPaused);
     }

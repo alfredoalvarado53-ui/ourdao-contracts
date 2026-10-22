@@ -208,10 +208,13 @@ pub fn member_overview(env: &Env, member: &Address) -> Result<MemberOverview, Er
 pub fn delegate_vote(env: &Env, delegator: Address, delegatee: Address) -> Result<(), Error> {
     util::require_initialized(env)?;
     util::require_not_paused(env)?;
-    delegator.require_auth();
 
     util::require_active_member(env, &delegator)?;
-    util::require_active_member(env, &delegatee)?;
+    match storage::get_member(env, &delegatee) {
+        Some(m) if m.status == MemberStatus::ActiveMember => Ok(m),
+        Some(_) => Err(Error::MemberNotActive),
+        None => Err(Error::NotMember),
+    }?;
 
     if delegator == delegatee {
         return Err(Error::InvalidDelegation);

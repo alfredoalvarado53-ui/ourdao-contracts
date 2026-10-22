@@ -682,3 +682,66 @@ fn storage_keys_keep_their_ledger_encoding() {
             .has(&(Symbol::new(&s.env, "Member"), member)));
     });
 }
+
+// ==================== issue #319: pauser cannot unpause ====================
+#[test]
+fn pauser_can_pause_but_cannot_unpause() {
+    let s = setup(1);
+    let pauser = Address::generate(&s.env);
+    let stranger = Address::generate(&s.env);
+
+    // Non-admin cannot assign a pauser
+    assert_eq!(
+        s.client.try_set_pauser(&stranger, &pauser),
+        Err(Ok(Error::NotAdmin))
+    );
+
+    // Admin sets pauser
+    s.client.set_pauser(&s.admin, &pauser);
+    // Setting same pauser again is rejected
+    assert_eq!(
+        s.client.try_set_pauser(&s.admin, &pauser),
+        Err(Ok(Error::AlreadyPauser))
+    );
+
+    // Pauser can trigger pause
+    assert!(!s.client.is_paused());
+    s.client.pause(&pauser);
+    assert!(s.client.is_paused());
+
+    // Calling pause while already paused errors
+    assert_eq!(s.client.try_pause(&pauser), Err(Ok(Error::Paused)));
+
+    // Pauser explicitly CANNOT unpause (#319)
+    assert_eq!(s.client.try_unpause(&pauser), Err(Ok(Error::NotAdmin)));
+    assert!(s.client.is_paused());
+
+    // Stranger cannot unpause
+    assert_eq!(s.client.try_unpause(&stranger), Err(Ok(Error::NotAdmin)));
+    assert!(s.client.is_paused());
+
+    // Only admin can unpause
+    s.client.unpause(&s.admin);
+    assert!(!s.client.is_paused());
+
+    // Calling unpause while not paused errors
+    assert_eq!(s.client.try_unpause(&s.admin), Err(Ok(Error::NotPaused)));
+
+    // Pauser can pause again
+    s.client.pause(&pauser);
+    assert!(s.client.is_paused());
+
+    // Admin unpauses
+    s.client.unpause(&s.admin);
+    assert!(!s.client.is_paused());
+
+    // Admin revokes pauser
+    s.client.revoke_pauser(&s.admin);
+    assert_eq!(
+        s.client.try_revoke_pauser(&s.admin),
+        Err(Ok(Error::NotPauser))
+    );
+
+    // Revoked pauser can no longer pause
+    assert_eq!(s.client.try_pause(&pauser), Err(Ok(Error::NotAdmin)));
+}

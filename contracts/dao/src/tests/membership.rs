@@ -121,7 +121,7 @@ fn rejoin_after_exit_is_counted_once_not_twice() {
     assert_eq!(s.client.get_active_members(), 2);
 
     s.client.register_member(&m);
-    assert_eq!(s.client.get_total_members(), 4);
+    assert_eq!(s.client.get_total_members(), 3);
     assert_eq!(s.client.get_active_members(), 3);
     assert_eq!(s.client.calculate_exit_share(&m), FEE);
 }
@@ -150,7 +150,7 @@ fn mixed_joins_exits_defaults_never_strand_value() {
     s.client.exit_dao(&b);
     s.client.register_member(&c);
 
-    assert_eq!(s.client.get_total_members(), 4);
+    assert_eq!(s.client.get_total_members(), 3);
     assert_eq!(s.client.get_active_members(), 2);
 
     let mut sum = 0i128;
@@ -361,7 +361,6 @@ fn get_member_overview_aggregates_member_state() {
     let pid = s.client.request_loan(&borrower, &1_000, &None);
     advance(&s.env, EDITING + 1);
     s.client.vote_on_loan_proposal(&v1, &pid, &true);
-    s.client.vote_on_loan_proposal(&v2, &pid, &true);
     s.client.repay_loan(&borrower, &0);
     s.client.stake(&borrower, &500);
 

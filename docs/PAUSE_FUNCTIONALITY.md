@@ -43,6 +43,11 @@ assignment with `revoke_pauser()`. Only admins can change the pauser assignment.
 The assigned pauser can call `pause()` without receiving any governance powers.
 Admins can also call `pause()` directly. Only an admin can call `unpause()`; the dedicated pauser cannot resume the DAO unless that address is independently an admin. An unauthorised unpause attempt returns `Error::NotAdmin` and leaves the paused state unchanged. A valid admin may resume operations even while the DAO is paused.
 
+### Pauser vs Admin Authority Separation (#319)
+- **Pause Authority**: Both full DAO admins and the dedicated `pauser` role can trigger `pause()` to freeze value-draining operations during an exploit.
+- **Unpause Authority**: The `pauser` role is strictly one-way. A designated pauser **CANNOT** call `unpause()`; attempting to do so returns `Error::NotAdmin`. Only full DAO admins can resume contract operations via `unpause()`.
+- **Rationale**: An emergency pauser (such as an automated monitoring bot or lower-tier operational key) needs the capability to stop damage immediately without human delay, but should not possess the high-privilege authority to resume transactions until human admins investigate the incident and verify safety.
+
 When `pause()` is called by an admin or the assigned pauser:
 - All new value transfers out of the contract are blocked (exit_dao, claim_rewards, unstake, disburse_approved_loan, execute_approved)
 - All state-changing operations are blocked (except repay_loan and admin functions)
