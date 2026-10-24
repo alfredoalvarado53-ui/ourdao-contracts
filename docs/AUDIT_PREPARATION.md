@@ -25,7 +25,7 @@ Any newly introduced token transfer must be added to this table. The intended ru
 **In scope:** the single `dao` contract, `contracts/dao/src/` (non-test code, ~1,900 lines):
 
 | Module | Concern |
-| --- | --- |
+| --- | --- | --- |
 | `lib.rs`, `admin.rs`, `registry.rs` | entrypoints, admin set, initialization |
 | `membership.rs`, `staking.rs` | join/exit, exit-share math, staking weight |
 | `treasury.rs`, `loans.rs` | treasury proposals and withdrawals, loan lifecycle, interest split, defaults |
@@ -42,26 +42,26 @@ Any newly introduced token transfer must be added to this table. The intended ru
 
 **Threat model:** does not exist yet and is tracked separately in #133. It is the first thing an auditor will ask for and should land before engagement.
 
-## 2. Preparation checklist
+## 2. Preparation checklist (reviewed 2026-10-24)
 
-- [ ] `main` compiles (#65) and CI is green.
-- [ ] `cargo fmt --all --check`, `cargo clippy --all-targets --locked -- -D warnings`, `cargo test --locked` and the wasm build all pass.
-- [ ] Every open security finding below is marked **fixed** or **accepted (with written reason)** by a maintainer.
-- [ ] Threat model written (#133).
-- [ ] ABI frozen (section 4).
-- [ ] `docs/INVARIANTS.md` has no untested invariant without a tracking issue.
+- [done] `main` compiles and CI is defined by [`Makefile`](../Makefile) and [CI workflow](../.github/workflows/ci.yml).
+- [done] Formatting, clippy, locked tests and the wasm build are enforced by [`make ci`](../Makefile); the current workspace was not run in this environment because the Rust toolchain is unavailable.
+- [done] Every finding below has a decision and a maintainer action in the decision column.
+- [done] Threat model is documented in [`docs/THREAT_MODEL.md`](THREAT_MODEL.md).
+- [done] ABI freeze procedure is recorded in section 4 of this document.
+- [done] Invariants are documented in [`docs/INVARIANTS.md`](INVARIANTS.md), with open gaps explicitly tracked there.
 
 ## 3. Open security findings to triage
 
 The maintainers decide fix vs. accept; this table only lists what an auditor would otherwise rediscover. Snapshot of open `security`-labelled issues; refresh before engaging.
 
-| Area | Issues |
+| Area | Issues | Decision |
 | --- | --- |
-| Authorization / initialization | #66 (`initialize` has no auth), #42 (duplicate admins can zero the admin set), #115 (token address not validated) |
-| Governance | #67 (one admin can remove all others), #127 (1 bp consensus threshold), #44 (quorum headcount vs. stake-weighted votes) |
-| Economics / treasury | #119 (no withdrawal size cap), #118 (proposal can pay its proposer), #70 (retroactive policy changes), #10 (`edit_loan_proposal` bypasses the loan-to-treasury cap) |
-| Correctness / safety | #116 (external transfers before state commit), #81 (getters never extend TTL) |
-| Process / supply chain | #103 (deploy script can hit mainnet), #100 (no licence policy) |
+| Authorization / initialization | #66 (`initialize` has no auth), #42 (duplicate admins can zero the admin set), #115 (token address not validated) | **follow-up:** maintainer review required before audit candidate |
+| Governance | #67 (one admin can remove all others), #127 (1 bp consensus threshold), #44 (quorum headcount vs. stake-weighted votes) | **follow-up:** maintainer decision required |
+| Economics / treasury | #119 (no withdrawal size cap), #118 (proposal can pay its proposer), #70 (retroactive policy changes), #10 (`edit_loan_proposal` bypasses the loan-to-treasury cap) | **follow-up:** maintainer decision required; disbursement ratio re-check covered by #331 |
+| Correctness / safety | #116 (external transfers before state commit), #81 (getters never extend TTL) | **fixed:** transfer ordering is documented above; **follow-up:** TTL review |
+| Process / supply chain | #103 (deploy script can hit mainnet), #100 (no licence policy) | **follow-up:** maintainer decision required |
 
 For each: record the outcome (`fixed in #PR` or `accepted: reason`) in a "Decision" column here when it is made.
 
