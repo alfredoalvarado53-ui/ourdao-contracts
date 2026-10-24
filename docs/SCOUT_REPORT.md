@@ -1,7 +1,7 @@
 # CoinFabrik Scout triage
 
-Reviewed: 2026-10-24  
-Target: `contracts/dao`  
+Reviewed: 2026-10-24
+Target: `contracts/dao`
 Requested command: `cargo scout-audit`
 
 ## Execution
