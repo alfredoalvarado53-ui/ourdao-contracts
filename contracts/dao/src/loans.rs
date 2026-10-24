@@ -408,6 +408,17 @@ fn approve_and_disburse(env: &Env, proposal: &LoanProposal) -> Result<(), Error>
         return Err(Error::InsufficientTreasury);
     }
 
+    // Treasury exposure can change after approval. Re-apply the policy cap at
+    // disbursement so an approved proposal cannot exceed the current ratio.
+    let policy = storage::get_policy(env);
+    let max_loan = treasury
+        .checked_mul(policy.max_loan_to_treasury_ratio as i128)
+        .ok_or(Error::ExceedsTreasuryRatio)?
+        / crate::types::BASIS_POINTS as i128;
+    if proposal.amount > max_loan {
+        return Err(Error::ExceedsTreasuryRatio);
+    }
+
     // Issue 61: re-quote at disbursement so rate reflects current treasury balance
     let terms = quote_terms(env, proposal.amount, treasury);
 

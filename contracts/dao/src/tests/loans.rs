@@ -567,6 +567,41 @@ fn approved_but_unfundable_loan_waits_then_disburses_after_refill() {
 }
 
 #[test]
+fn disbursement_rechecks_max_loan_to_treasury_ratio() {
+    let s = setup(4); // treasury = 4000, ratio = 50%
+    let borrower = s.members.get(0).unwrap();
+    let v1 = s.members.get(1).unwrap();
+    let v2 = s.members.get(2).unwrap();
+    let v3 = s.members.get(3).unwrap();
+
+    // The request is valid while the treasury is 4000 (1500 <= 2000).
+    let pid = s.client.request_loan(&borrower, &1_500, &None);
+
+    // Leave enough cash to pay the loan, but below the 50% exposure cap.
+    let destination = Address::generate(&s.env);
+    let reason = String::from_str(&s.env, "shrink treasury");
+    let withdrawal = s
+        .client
+        .propose_treasury_withdrawal(&v1, &2_200, &destination, &reason, &false);
+    s.client.vote_on_treasury_proposal(&v1, &withdrawal, &true);
+    s.client.vote_on_treasury_proposal(&v2, &withdrawal, &true);
+    s.client.vote_on_treasury_proposal(&v3, &withdrawal, &true);
+    assert_eq!(s.client.get_treasury_balance(), 1_800);
+
+    advance(&s.env, EDITING + 1);
+    s.client.vote_on_loan_proposal(&v1, &pid, &true);
+    s.client.vote_on_loan_proposal(&v2, &pid, &true);
+    s.client.vote_on_loan_proposal(&v3, &pid, &true);
+
+    assert_eq!(
+        s.client.try_disburse_approved_loan(&pid),
+        Err(Ok(Error::ExceedsTreasuryRatio))
+    );
+    assert!(s.client.get_loan(&pid).is_none());
+    assert_eq!(s.client.get_treasury_balance(), 1_800);
+}
+
+#[test]
 fn loan_proposal_uses_dynamic_quorum_threshold() {
     // 4 members. Threshold set to 5100 (needs 3 votes normally).
     // If policy has quorum_bps = 2500 (needs ceil(4 * 25%) = 1 vote), 1 vote is enough to approve!
