@@ -95,3 +95,8 @@ fn lock_seeding(env: Env, caller: Address) -> Result<(), Error>
 Say this plainly, because burying it is how it stops being checked: **admins seeding a migrated contract are trusted to seed it truthfully.** The contract has no way to verify that a seeded `Member` record, loan, or stake actually matches what the old contract held — `seed_state` accepts whatever the caller passes. Nothing about the design in this document changes that; it can't, because verifying arbitrary historical state on-chain against a contract that's being decommissioned isn't a problem Soroban gives us primitives for.
 
 What makes a migration accountable, then, isn't the contract — it's procedure step 8. The seeded dataset (or a hash of it, with the raw data published off-chain) has to be checkable by any member against `ourdao-backend`'s event log and against their own last interaction with the old contract, *before* `lock_seeding` closes the window. A migration nobody checked is a migration that was trusted on faith, regardless of how carefully this document was followed.
+
+
+### Contract version and lineage semantics (`get_dao_summary().version`)
+
+During and immediately following migration (from `initialize` and throughout `seed_*` calls before `lock_seeding`), `get_dao_summary().version` always returns the *new deployment's own build version* (`CARGO_PKG_VERSION`), without carrying over or referencing the previous contract's version. This is the intended behavior: the version field reflects the executing WebAssembly binary artifact's build version. Migration lineage (such as the prior contract address) is tracked off-chain through governance proposals and migration transaction receipts rather than on-chain state.
