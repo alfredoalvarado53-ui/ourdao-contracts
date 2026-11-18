@@ -53,6 +53,8 @@ pub struct Member {
     pub contribution: i128,
     pub share_balance: i128,
     pub has_active_loan: bool,
+    /// Ledger timestamp of this member's most recently disbursed loan.
+    /// Sentinel value `0` indicates the member has never borrowed before, skipping cooldown checks.
     pub last_loan_time: u64,
     /// Lifetime count of loans disbursed to this member.
     pub total_loans: u32,
